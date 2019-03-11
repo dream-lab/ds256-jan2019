@@ -46,8 +46,8 @@ public class pr {
 
 		System.out.println("the input and outfput file are " + inputFile + " " + outputFile);
 
-//		SparkConf sparkConf = new SparkConf().setMaster("local").setAppName("PageRank"); /** configuration to run on local desktop **/
-		SparkConf sparkConf = new SparkConf().setAppName("PageRank");
+		SparkConf sparkConf = new SparkConf().setMaster("local").setAppName("PageRank"); /** configuration to run on local desktop **/
+//		SparkConf sparkConf = new SparkConf().setAppName("PageRank");
 		JavaSparkContext sc = new JavaSparkContext(sparkConf);
 
 		JavaRDD<String> inputRDD = sc.textFile(inputFile);
