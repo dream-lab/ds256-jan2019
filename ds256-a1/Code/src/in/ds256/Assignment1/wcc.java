@@ -1,9 +1,20 @@
 package in.ds256.Assignment1;
 
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Iterator;
+
 import org.apache.spark.SparkConf;
+import org.apache.spark.api.java.JavaPairRDD;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
+import org.apache.spark.api.java.function.Function;
+import org.apache.spark.api.java.function.Function2;
+import org.apache.spark.api.java.function.PairFlatMapFunction;
+import org.apache.spark.api.java.function.PairFunction;
+
+import scala.Tuple2;
+import scala.Tuple3;
 
 public class wcc {
 
@@ -12,14 +23,199 @@ public class wcc {
 		String inputFile = args[0]; // Should be some file on HDFS
 		String outputFile = args[1]; // Should be some file on HDFS
 		
-		SparkConf sparkConf = new SparkConf().setAppName("WCC");
+		SparkConf sparkConf = new SparkConf().setMaster("local").setAppName("WCC");
+//		SparkConf sparkConf = new SparkConf().setAppName("WCC");
 		JavaSparkContext sc = new JavaSparkContext(sparkConf);
 
-		JavaRDD<String> inputRDD = sc.textFile(inputFile);
+		JavaRDD<String> inputRDD = sc.textFile(inputFile).repartition(4); /**enforce 4 partitions **/
+
+		inputRDD = inputRDD.filter(new Function<String, Boolean>() {
+			@Override
+			public Boolean call(String v1) throws Exception {			
+								
+				if(v1.contains("#"))
+					return false;			
+				
+				return true;
+			}
+		});
 		
-		/**
-		 * Code goes here...
-		 */
+		JavaPairRDD<Long, Long> undirectedVerticesRDD ;
+		
+		/** undirectedVerticesRDD is the undirected edge list **/
+		undirectedVerticesRDD = inputRDD.mapPartitionsToPair( new PairFlatMapFunction<Iterator<String>, Long, Long>() {		
+			@Override
+			public Iterator<Tuple2<Long, Long>> call(Iterator<String> t) throws Exception {
+				
+				ArrayList<Tuple2<Long,Long>> myIter =  new ArrayList<Tuple2<Long,Long>>();
+				
+				while(t.hasNext()) {					
+					String row = t.next();					
+					String[] vertices = row.split("\\s+");
+
+					Tuple2<Long, Long> forward = new Tuple2<Long, Long>(Long.valueOf(vertices[0]), Long.valueOf(vertices[1]));
+					Tuple2<Long, Long> backward = new Tuple2<Long, Long>(Long.valueOf(vertices[1]), Long.valueOf(vertices[0]));
+					
+					myIter.add(forward);
+					myIter.add(backward);					
+				}				
+				
+				return myIter.iterator();
+			}
+		} );		
+		
+	
+		JavaPairRDD<Long, Tuple3<Long, Long, Boolean>> graphRDD = undirectedVerticesRDD.mapToPair(  new PairFunction<Tuple2<Long,Long>, Long, Tuple3<Long, Long, Boolean>>() {
+
+			@Override
+			public Tuple2<Long, Tuple3<Long, Long, Boolean>> call(Tuple2<Long, Long> t) throws Exception {
+
+				Tuple2<Long, Long> row = t;
+				
+				Long vertexId = row._1();
+				Long neighborVertexId = row._2();
+				Boolean changed = true;
+				
+				Long maxValue = vertexId>neighborVertexId? vertexId:neighborVertexId;
+				
+				Tuple3<Long, Long, Boolean> myTupleVal = new Tuple3<Long, Long, Boolean>(neighborVertexId, maxValue, changed); /** Saving the max value */
+				Tuple2<Long,Tuple3<Long, Long, Boolean>> myTuple = new Tuple2<Long, Tuple3<Long,Long,Boolean>>(vertexId, myTupleVal);
+				
+				return myTuple;
+				
+			}
+		}  );
+		
+		System.out.println("The (before) number of entries in "+graphRDD.count());
+		
+		
+		
+		int i =0;
+		JavaPairRDD<Long, Tuple3<Long, Long, Boolean>> prevGraphRDD;
+		
+		while(true) {
+			
+			prevGraphRDD = graphRDD;
+			
+			i++;					
+			JavaPairRDD<Long, Tuple3<Long, Long, Boolean>> messagesRDD = graphRDD.mapToPair(new PairFunction<Tuple2<Long,Tuple3<Long,Long,Boolean>>, Long, Tuple3<Long, Long, Boolean>>() {
+
+				@Override
+				public Tuple2<Long, Tuple3<Long, Long, Boolean>> call(Tuple2<Long, Tuple3<Long, Long, Boolean>> t)
+						throws Exception {
+					
+					Tuple3<Long, Long, Boolean> neighbor = t._2();
+					Long neighborVertexId = neighbor._1();
+					Long maxValue = neighbor._2(); //This is what is being sent as a message
+					Boolean changed = neighbor._3(); 
+					
+					Tuple3<Long, Long, Boolean> myTupleVal = new Tuple3<Long, Long, Boolean>(null, maxValue, changed); /** neighbor vertex Id is null in the message, this is what differentiates between message and the graph RDD **/
+					Tuple2<Long, Tuple3<Long, Long, Boolean>> myTuple = new Tuple2<Long, Tuple3<Long,Long,Boolean>>(neighborVertexId, myTupleVal);
+					
+					return myTuple;
+				}
+			});			
+									
+			graphRDD = graphRDD.union(messagesRDD).groupByKey().mapPartitionsToPair( new PairFlatMapFunction<Iterator<Tuple2<Long,Iterable<Tuple3<Long,Long,Boolean>>>>, Long, Tuple3<Long, Long, Boolean>>() {
+				@Override
+				public Iterator<Tuple2<Long, Tuple3<Long, Long, Boolean>>> call(Iterator<Tuple2<Long, Iterable<Tuple3<Long, Long, Boolean>>>> t) throws Exception {
+					
+					ArrayList<Tuple2<Long, Tuple3<Long, Long, Boolean>>> myIter = new ArrayList<Tuple2<Long,Tuple3<Long,Long,Boolean>>>();					
+					
+					while(t.hasNext()) {
+						
+						Tuple2<Long, Iterable<Tuple3<Long, Long, Boolean>>> row = t.next();
+						
+						Long vertexId = row._1();
+						Long maxVal = Long.MIN_VALUE;
+						Boolean changed = false;
+						
+						Iterator<Tuple3<Long, Long, Boolean>> neighbors = row._2().iterator(); /** neighbors **/
+						
+						/** get the actual value sent by the vertex **/
+						while(neighbors.hasNext()) {							
+							Tuple3<Long, Long, Boolean> message = neighbors.next();
+							
+							if(message._2()!=null) { /** trying to find the max value sent by neighbors **/
+								if(maxVal < message._2()) {
+									maxVal = message._2();
+									changed = true; /** Important condition which decides whether the code will converge or not **/
+								}
+							}							
+						}
+						
+						System.out.println("The maxval is "+maxVal);
+						
+						/** Prepare tuples for neighbors for the vertex**/					
+						neighbors = row._2().iterator();
+						while(neighbors.hasNext()) {						
+							 Tuple3<Long, Long, Boolean> message = neighbors.next();
+							 
+							 if(message._1()!=null) { /** vertex's actual neighbor **/								 
+								 Tuple3<Long, Long, Boolean> neighborTuple = new Tuple3<Long, Long, Boolean>(message._1(), maxVal, changed); /** message._1() is the actual neighbor vertex for the vertexId **/
+								 Tuple2<Long, Tuple3<Long, Long, Boolean>> myTuple = new Tuple2<Long, Tuple3<Long,Long,Boolean>>(vertexId, neighborTuple);								 
+								 myIter.add(myTuple);
+							 }							
+						}												
+					}					
+					return myIter.iterator();					
+				}
+				
+			});
+			
+			
+			System.out.println("The number of entries in "+graphRDD.count());	
+			System.out.println("The number of entries in prevRDD "+prevGraphRDD.count());
+			
+			JavaPairRDD<Long, Tuple2<Tuple3<Long, Long, Boolean>, Tuple3<Long, Long, Boolean>>>  convergenceRDD = graphRDD.join(prevGraphRDD);
+			
+			JavaPairRDD<Boolean, Long> finalRDD = convergenceRDD.mapToPair( new PairFunction<Tuple2<Long,Tuple2<Tuple3<Long,Long,Boolean>,Tuple3<Long,Long,Boolean>>>, Boolean, Long>() {
+
+				@Override
+				public Tuple2<Boolean, Long> call(
+						Tuple2<Long, Tuple2<Tuple3<Long, Long, Boolean>, Tuple3<Long, Long, Boolean>>> t)
+						throws Exception {
+				
+					Tuple2<Long, Tuple2<Tuple3<Long, Long, Boolean>, Tuple3<Long, Long, Boolean>>> row = t;
+					Boolean changed = true;
+					
+					Tuple3<Long, Long, Boolean> firstOne = row._2()._1();
+					Tuple3<Long, Long, Boolean> secondOne = row._2()._2();
+					
+					Long val1 = firstOne._2();
+					Long val2 = secondOne._2();
+					
+					if(val1.equals(val2))
+						changed = false;
+											
+					Tuple2<Boolean, Long> myTuple = new Tuple2<Boolean, Long>(changed, (long) 0);
+					
+					return myTuple;
+					
+				}
+			}  );
+			
+			for(Tuple2<Boolean,Long> item : finalRDD.collect() ) {
+				System.out.println("The key is "+item._1());
+			}
+			
+			finalRDD = finalRDD.reduceByKey( new Function2<Long, Long, Long>() {
+				
+				@Override
+				public Long call(Long v1, Long v2) throws Exception {
+					// TODO Auto-generated method stub
+					return v1+v2;
+				}
+			} );
+			
+			if(finalRDD.keys().collect().size()==1 && finalRDD.keys().collect().get(0)==false) {
+				System.out.println("Things have converged :) ");
+				break;
+			}
+						
+		}/* end of while loop */
+		
+		graphRDD.saveAsTextFile(outputFile);
 		
 		sc.stop();
 		sc.close();

@@ -33,7 +33,7 @@ public class sssp {
 			//FIXME: What would happen if the input read is empty ?
 			if(tokens.length>1) {
 				for( int i=1; i<tokens.length; i=i+2) {
-					neighbours.add(new Tuple2<Long, Double>(Long.parseLong(tokens[i]), Double.parseDouble(tokens[i+1])));
+					neighbours.add(new Tuple2<Long, Double>(Long.parseLong(tokens[i]), Double.parseDouble(tokens[i+1]))); /** neighbor vertex Id and distance **/
 				}
 			} 
 			
@@ -46,6 +46,8 @@ public class sssp {
 		
 		// Control will exit this loop when the algorithm has converged.
 		while(!hasConverged) {
+			
+			/** This is important **/
 			JavaPairRDD<Long, Tuple3<ArrayList<Tuple2<Long, Double>>, Boolean, Double>> messages = graphRDD.flatMapToPair(vertex -> { 
 				ArrayList<Tuple2<Long, Tuple3<ArrayList<Tuple2<Long, Double>>, Boolean, Double>>> tuples = new ArrayList<>();
 				ArrayList<Tuple2<Long, Double>> neighbours = vertex._2._1();

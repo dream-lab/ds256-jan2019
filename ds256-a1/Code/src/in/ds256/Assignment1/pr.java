@@ -52,9 +52,18 @@ public class pr {
 
 		JavaRDD<String> inputRDD = sc.textFile(inputFile);
 
-		/**
-		 * Code goes here...
-		 */
+		inputRDD = inputRDD.filter(new Function<String, Boolean>() {
+
+			@Override
+			public Boolean call(String v1) throws Exception {			
+								
+				if(v1.contains("#"))
+					return false;			
+				
+				return true;
+			}
+		});
+		
 		JavaPairRDD<String, String> edgeRDD = inputRDD.flatMapToPair(new PairFlatMapFunction<String, String, String>() {
 
 			@Override
@@ -136,8 +145,7 @@ public class pr {
 
 								Double diff = Math.abs(newRank - oldRank);
 								System.out.println("The outlinks are "+outlinks);
-								System.out.println("The oldranks are "+oldRank+" The new rank is "+newRank);
-								System.out.println("The difference is "+diff);
+								System.out.println("rank is "+newRank);
 								if (diff <= EPSILON)
 									changed = false;
 								else

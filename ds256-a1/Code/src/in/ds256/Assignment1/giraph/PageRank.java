@@ -40,7 +40,7 @@ public class PageRank extends  BasicComputation<LongWritable, DoubleWritable, Fl
 				pageRankCurr = pageRankCurr + message.get();
 			}
 			
-			pageRankCurr = 0.15 + 0.85*pageRankCurr;
+			pageRankCurr = 0.15 + DAMPENING_FACTOR*pageRankCurr;
 			
 			Double diff = pageRankOld - pageRankCurr ;
 			
