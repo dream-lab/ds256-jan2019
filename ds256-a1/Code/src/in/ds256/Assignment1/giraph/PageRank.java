@@ -1,4 +1,5 @@
 package in.ds256.Assignment1.giraph;
+
 import org.apache.giraph.graph.Vertex;
 import org.apache.giraph.edge.Edge;
 import org.apache.giraph.graph.BasicComputation;
@@ -14,55 +15,43 @@ import org.apache.zookeeper.server.quorum.Vote;
 import java.io.IOException;
 import java.lang.Math;
 
-public class PageRank extends  BasicComputation<LongWritable, DoubleWritable, FloatWritable, DoubleWritable> {
+/**Reference : https://github.com/usi-systems/giraph-pagerank/blob/master/pagerank/PageRank.java **/
+
+public class PageRank extends BasicComputation<LongWritable, DoubleWritable, FloatWritable, DoubleWritable> {
 	
-	private static final Logger LOG = Logger.getLogger(PageRank.class);
 	private static int NUM_SUPERSTEPS = 10;
 	private static double DAMPENING_FACTOR = 0.85;
-	private static double EPSILON = 0.1;
-	private static double pageRankOld = 0.0;
-	private static double pageRankCurr = 0.0;
-	private static boolean changed = true;
-	
+	private static double EPSILON = 0.0001;
+
 	@Override
-	public void compute(Vertex<LongWritable, DoubleWritable, FloatWritable> vertex, Iterable<DoubleWritable> messages)
-			throws IOException {	
+	public void compute(Vertex<LongWritable, DoubleWritable, FloatWritable> vertex, Iterable<DoubleWritable> messages) {
+		double pageRank_par = 0, pageRankOld = 0;
+		boolean changed = false;
 		
-		if(getSuperstep()==0) { /** The default page rank we set to each vertex is 1.0 **/
+		if (getSuperstep() == 0)
 			vertex.setValue(new DoubleWritable(1.0));
-			
-		}else if(getSuperstep() >= 1 && getSuperstep()<= NUM_SUPERSTEPS) {
+		else if (getSuperstep() >= 1) {
 			
 			pageRankOld = vertex.getValue().get();
-			pageRankCurr = 0.0;
 			
-			for(DoubleWritable message: messages) {
-				pageRankCurr = pageRankCurr + message.get();
+			for (DoubleWritable message : messages) {
+				pageRank_par += message.get();
 			}
 			
-			pageRankCurr = 0.15 + DAMPENING_FACTOR*pageRankCurr;
+			vertex.setValue(new DoubleWritable(0.15 + DAMPENING_FACTOR * pageRank_par));
+			changed = Math.abs(pageRankOld - vertex.getValue().get()) < EPSILON;
 			
-			Double diff = pageRankOld - pageRankCurr ;
+		}
+		if (!changed && getSuperstep() < NUM_SUPERSTEPS) {
 			
-			if(diff <= EPSILON)
-				changed = false;
-			else
-				changed = true;
+			int numAdjEdges = vertex.getNumEdges();
+			DoubleWritable pageRankCurr = new DoubleWritable(vertex.getValue().get() / numAdjEdges);
+			for (Edge<LongWritable, FloatWritable> edge : vertex.getEdges())
+				sendMessage(edge.getTargetVertexId(), pageRankCurr);
+			
 		}
-		
-		if(getSuperstep()<= NUM_SUPERSTEPS && changed == true ) {
-			int numVertices = vertex.getNumEdges();
-			/** This is important **/
-			/** This tells how much contribution of pagerank is going to each vertex **/
-			DoubleWritable pageRankToSend = new DoubleWritable(vertex.getValue().get()/numVertices); 
-						
-			for(Edge<LongWritable, FloatWritable> edge : vertex.getEdges()) {
-				sendMessage(edge.getTargetVertexId(), pageRankToSend);
-			}
-		}
-		
+
+		System.out.println("PageRank Superstep: " + getSuperstep());
 		vertex.voteToHalt();
-		
 	}
-	
 }

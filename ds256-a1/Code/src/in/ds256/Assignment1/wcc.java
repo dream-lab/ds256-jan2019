@@ -33,7 +33,7 @@ public class wcc {
 //		SparkConf sparkConf = new SparkConf().setAppName("WCC");
 		JavaSparkContext sc = new JavaSparkContext(sparkConf);
 
-		JavaRDD<String> inputRDD = sc.textFile(inputFile); /**enforce 4 partitions **/
+		JavaRDD<String> inputRDD = sc.textFile(inputFile).repartition(4); /**enforce 4 partitions **/
 
 		inputRDD = inputRDD.filter(new Function<String, Boolean>() {
 			@Override
