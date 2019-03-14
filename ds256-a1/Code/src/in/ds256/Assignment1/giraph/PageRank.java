@@ -6,13 +6,7 @@ import org.apache.giraph.graph.BasicComputation;
 import org.apache.hadoop.io.DoubleWritable;
 import org.apache.hadoop.io.FloatWritable;
 import org.apache.hadoop.io.LongWritable;
-import org.apache.hadoop.io.Text;
-import org.apache.hadoop.io.Writable;
-import org.apache.log4j.Logger;
-import org.apache.log4j.Priority;
-import org.apache.zookeeper.server.quorum.Vote;
 
-import java.io.IOException;
 import java.lang.Math;
 
 /**Reference : https://github.com/usi-systems/giraph-pagerank/blob/master/pagerank/PageRank.java **/
@@ -25,7 +19,7 @@ public class PageRank extends BasicComputation<LongWritable, DoubleWritable, Flo
 
 	@Override
 	public void compute(Vertex<LongWritable, DoubleWritable, FloatWritable> vertex, Iterable<DoubleWritable> messages) {
-		double pageRank_par = 0, pageRankOld = 0;
+		double pageRankCur = 0, pageRankOld = 0;
 		boolean changed = false;
 		
 		if (getSuperstep() == 0)
@@ -35,10 +29,10 @@ public class PageRank extends BasicComputation<LongWritable, DoubleWritable, Flo
 			pageRankOld = vertex.getValue().get();
 			
 			for (DoubleWritable message : messages) {
-				pageRank_par += message.get();
+				pageRankCur += message.get();
 			}
 			
-			vertex.setValue(new DoubleWritable(0.15 + DAMPENING_FACTOR * pageRank_par));
+			vertex.setValue(new DoubleWritable(0.15 + DAMPENING_FACTOR * pageRankCur));
 			changed = Math.abs(pageRankOld - vertex.getValue().get()) < EPSILON;
 			
 		}
