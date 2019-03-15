@@ -10,6 +10,7 @@ import org.apache.hadoop.io.LongWritable;
 import java.lang.Math;
 
 /**Reference : https://github.com/usi-systems/giraph-pagerank/blob/master/pagerank/PageRank.java **/
+/** https://github.com/sakrsherif/GiraphBookSourceCodes/blob/master/chapter04_05/src/main/java/bookExamples/ch4/algorithms/PageRankVertexComputation.java **/ 
 
 public class PageRank extends BasicComputation<LongWritable, DoubleWritable, FloatWritable, DoubleWritable> {
 	
@@ -31,12 +32,12 @@ public class PageRank extends BasicComputation<LongWritable, DoubleWritable, Flo
 			for (DoubleWritable message : messages) {
 				pageRankCur += message.get();
 			}
-			
+			/** http://www.cs.princeton.edu/~chazelle/courses/BIB/pagerank.htm **/
 			vertex.setValue(new DoubleWritable(0.15 + DAMPENING_FACTOR * pageRankCur));
 			changed = Math.abs(pageRankOld - vertex.getValue().get()) < EPSILON;
 			
 		}
-		if (!changed && getSuperstep() < NUM_SUPERSTEPS) {
+		if (changed==true && getSuperstep() < NUM_SUPERSTEPS) { /** Exit either if it is changed or number of iterations have expired **/
 			
 			int numAdjEdges = vertex.getNumEdges();
 			DoubleWritable pageRankCurr = new DoubleWritable(vertex.getValue().get() / numAdjEdges);

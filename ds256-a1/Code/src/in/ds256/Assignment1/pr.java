@@ -113,7 +113,7 @@ public class pr {
 		
 		JavaPairRDD<String, Tuple2<Double, Boolean>> prevRankRDD; 
 
-		for (int i = 0; i < 20; i++) {
+		for (int i = 0; i < NUM_ITERATIONS; i++) {
 			
 			/** Asign init to prev **/
 			prevRankRDD = initRankRDD;
